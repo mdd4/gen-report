@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#030712">
+<title>Gen Report</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<style>
+body{background:#030712;margin:0;-webkit-tap-highlight-color:transparent}
+.no-scrollbar::-webkit-scrollbar{display:none}
+.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+*{-webkit-user-select:none;user-select:none}
+input,textarea,pre,.select-all{-webkit-user-select:text;user-select:text}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+const storage = {
+  get: (k) => { try { const v = localStorage.getItem(k); return v ? { value: v } : null; } catch(e){ return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch(e){} },
+  delete: (k) => { try { localStorage.removeItem(k); } catch(e){} },
+};
+
+// ── Scroll Wheel ─────────────────────────────────────────
+const HOURS   = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+
+function ScrollWheel({ items, value, onChange, width }) {
+  const ref  = useRef(null);
+  const ih   = 44;
+  const tout = useRef(null);
+  const usr  = useRef(false);
+  const idx  = items.indexOf(value);
+  useEffect(() => {
+    if (ref.current && !usr.current) {
+      const i = items.indexOf(value);
+      if (i >= 0) ref.current.scrollTop = i * ih;
+    }
+  }, [value, items]);
+  const onScroll = () => {
+    usr.current = true;
+    if (tout.current) clearTimeout(tout.current);
+    tout.current = setTimeout(() => {
+      if (ref.current) {
+        const i = Math.max(0, Math.min(Math.round(ref.current.scrollTop / ih), items.length - 1));
+        ref.current.scrollTo({ top: i * ih, behavior: "smooth" });
+        onChange(items[i]);
+      }
+      usr.current = false;
+    }, 80);
+  };
+  return (
+    <div className="relative" style={{ width: width || 70, height: ih * 3 }}>
+      <div className="absolute inset-x-0 top-1/2 transform -translate-y-1/2 h-11 bg-blue-600 bg-opacity-20 border-t border-b border-blue-500 border-opacity-40 rounded pointer-events-none" style={{zIndex:10}} />
+      <div ref={ref} onScroll={onScroll} className="h-full overflow-y-scroll no-scrollbar"
+        style={{ scrollSnapType:"y mandatory", paddingTop:ih, paddingBottom:ih, WebkitOverflowScrolling:"touch" }}>
+        {items.map((item, i) => (
+          <div key={item} style={{ height:ih, scrollSnapAlign:"center" }}
+            className={`flex items-center justify-center ${i===idx ? "text-white text-xl font-bold" : "text-gray-500 text-lg"}`}
+            onClick={() => { onChange(item); if (ref.current) ref.current.scrollTo({ top:i*ih, behavior:"smooth" }); }}>
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TimePicker({ value, onChange, label }) {
+  const [open, setOpen] = useState(false);
+  const [hr,  setHr]   = useState("07");
+  const [min, setMin]  = useState("00");
+  const openP = () => {
+    if (value) { setHr(value.split(":")[0]); setMin(value.split(":")[1]); }
+    setOpen(true);
+  };
+  return (
+    <div>
+      <button onClick={openP}
+        className={`w-full py-3 px-3 rounded-lg text-center text-lg font-mono ${value ? "bg-gray-800 border border-blue-500 border-opacity-50 text-white" : "bg-gray-800 border border-gray-700 text-gray-500"}`}>
+        {value || "-- : --"}
+      </button>
+      {open && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-end justify-center" style={{zIndex:50}}
+          onClick={(e) => { if (e.target===e.currentTarget) setOpen(false); }}>
+          <div className="bg-gray-900 w-full rounded-t-2xl p-6 pb-8" style={{maxWidth:"32rem"}}>
+            <div className="text-center text-sm text-gray-400 mb-2">{label}</div>
+            <div className="text-center text-4xl font-mono font-bold text-white mb-6">{hr}:{min}</div>
+            <div className="flex justify-center items-center gap-4 mb-8">
+              <ScrollWheel items={HOURS}   value={hr}  onChange={setHr}  width={90} />
+              <span className="text-3xl font-bold text-gray-400">:</span>
+              <ScrollWheel items={MINUTES} value={min} onChange={setMin} width={90} />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { onChange(""); setOpen(false); }} className="flex-1 py-3 rounded-lg bg-gray-800 text-gray-400 font-medium">Clear</button>
+              <button onClick={() => setOpen(false)}                    className="flex-1 py-3 rounded-lg bg-gray-800 text-gray-300 font-medium">Cancel</button>
+              <button onClick={() => { onChange(`${hr}:${min}`); setOpen(false); }} className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-medium">Set</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function todayISO() { return new Date().toISOString().slice(0,10); }
+function fmtDate(iso) {
+  if (!iso) return "";
+  const [y,m,d] = iso.split("-");
+  return `${m}/${d}/${y}`;
+}
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function buildReport(jobNum, xfmr, gen, mode) {
+  const lines = [];
+  if (jobNum) { lines.push(`Job # ${jobNum}`); lines.push(""); }
+  if (xfmr.xfmrNum) {
+    lines.push(`Gen-${xfmr.xfmrNum}`);
+    if (xfmr.gps) lines.push(`GPS ${xfmr.gps}`);
+    lines.push("");
+  }
+  if (gen.manufacturer && gen.genNum && gen.kw) {
+    lines.push(`${gen.manufacturer}: ${gen.genNum}`);
+    lines.push(`${gen.kw}kW`);
+    lines.push("");
+  }
+  if (gen.perp) { lines.push(`PERP: ${gen.perp}`); lines.push(""); }
+  const hasHours = gen.startHours || (mode==="final" && gen.endHours);
+  if (gen.startHours) lines.push(`Start hours: ${gen.startHours}`);
+  if (mode==="final" && gen.endHours) lines.push(`End hours: ${gen.endHours}`);
+  if (hasHours) lines.push("");
+  const hasFuel = gen.startFuel || (mode==="final" && gen.endFuel);
+  if (gen.startFuel) lines.push(`Start fuel: ${gen.startFuel}%`);
+  if (mode==="final" && gen.endFuel) lines.push(`End fuel: ${gen.endFuel}%`);
+  if (hasFuel) lines.push("");
+  const hasDEF = gen.startDEF || (mode==="final" && gen.endDEF);
+  if (gen.startDEF) lines.push(`Start DEF: ${gen.startDEF}%`);
+  if (mode==="final" && gen.endDEF) lines.push(`End DEF: ${gen.endDEF}%`);
+  if (hasDEF) lines.push("");
+  if (gen.onlineTime && gen.onlineDate) {
+    const [y,mo,dy] = gen.onlineDate.split("-");
+    lines.push(`Online time: ${gen.onlineTime}`);
+    lines.push(`Date: ${mo}/${dy}/${y.slice(2)}`);
+    lines.push("");
+  }
+  if (mode==="final" && gen.offlineTime && gen.offlineDate) {
+    const [y,mo,dy] = gen.offlineDate.split("-");
+    lines.push(`Offline time: ${gen.offlineTime}`);
+    lines.push(`Date: ${mo}/${dy}/${y.slice(2)}`);
+  }
+  while (lines.length && lines[lines.length-1]==="") lines.pop();
+  return lines.join("\n");
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-400 mb-1 text-center">{label}</label>
+      {children}
+    </div>
+  );
+}
+const ic = "w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-3 text-base text-gray-100 focus:outline-none focus:border-blue-500";
+
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 1400); };
+    function fb() { const ta = document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); done(); }
+    if (navigator.clipboard) { navigator.clipboard.writeText(text).then(done).catch(fb); } else { fb(); }
+  };
+  return (
+    <button onClick={copy}
+      className={`w-full py-3 rounded-lg text-base font-semibold ${copied ? "bg-green-600 text-white" : "bg-blue-600 text-white"}`}>
+      {copied ? "✓ Copied!" : "Copy Report"}
+    </button>
+  );
+}
+
+function Confirm({ message, onConfirm, onCancel, confirmLabel }) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center px-6" style={{zIndex:60}}>
+      <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full" style={{maxWidth:"24rem"}}>
+        <p className="text-gray-200 text-base mb-5 text-center">{message}</p>
+        <div className="flex gap-3">
+          <button onClick={onCancel}  className="flex-1 py-3 rounded-lg bg-gray-800 text-gray-300 font-medium">Cancel</button>
+          <button onClick={onConfirm} className="flex-1 py-3 rounded-lg bg-red-600 text-white font-medium">{confirmLabel || "Delete"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Data defaults ─────────────────────────────────────────
+const EMPTY_XFMR = { xfmrNum:"", gps:"", lat:"", lon:"" };
+const EMPTY_GEN  = {
+  manufacturer:"", genNum:"", kw:"", perp:"",
+  startHours:"", endHours:"",
+  startFuel:"",  endFuel:"",
+  startDEF:"",   endDEF:"",
+  onlineTime:"",  onlineDate:"",
+  offlineTime:"", offlineDate:"",
+};
+
+function newGenEntry(copyFrom) {
+  return { id: genId(), xfmr: { ...EMPTY_XFMR }, gen:{ ...EMPTY_GEN, onlineDate:todayISO(), offlineDate:todayISO() }, mode:"startup" };
+}
+function newJob() {
+  return { id: genId(), jobNum:"", gens:[newGenEntry(null)], activeGenIdx:0, created: Date.now() };
+}
+function genLabel(g, allGens) {
+  if (!g.xfmr.xfmrNum) return "New";
+  if (!allGens) return `Gen-${g.xfmr.xfmrNum}`;
+  const matches = allGens.filter(x => x.xfmr.xfmrNum === g.xfmr.xfmrNum);
+  if (matches.length <= 1) return `Gen-${g.xfmr.xfmrNum}`;
+  const pos = matches.indexOf(g) + 1;
+  return `Gen-${g.xfmr.xfmrNum}(${pos})`;
+}
+
+const JOBS_INDEX_KEY = "genreport-jobs-index";
+const jobKey = (id) => `genreport-job-${id}`;
+const UI_KEY  = "genreport-ui";
+
+function loadJobIndex() {
+  try { const r = storage.get(JOBS_INDEX_KEY); return r ? JSON.parse(r.value) : []; } catch(e){ return []; }
+}
+function saveJobIndex(index) { storage.set(JOBS_INDEX_KEY, JSON.stringify(index)); }
+function loadJob(id) {
+  try { const r = storage.get(jobKey(id)); return r ? JSON.parse(r.value) : null; } catch(e){ return null; }
+}
+function saveJob(job) { storage.set(jobKey(job.id), JSON.stringify(job)); }
+function deleteJobData(id) { storage.delete(jobKey(id)); }
+
+// ── App ───────────────────────────────────────────────────
+function App() {
+  const [loaded,     setLoaded]     = useState(false);
+  // "jobs" screen or "entry" screen
+  const [screen,     setScreen]     = useState("jobs"); // "jobs" | "entry"
+  const [jobIndex,   setJobIndex]   = useState([]); // [{id, jobNum, created}]
+  const [activeJob,  setActiveJob]  = useState(null); // full job object
+  const [tab,        setTab]        = useState(0); // 0=Entry, 1=Report
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(null); // {type:"job"|"gen", id, idx}
+
+  // Load index + last open job on mount
+  useEffect(() => {
+    const idx = loadJobIndex();
+    setJobIndex(idx);
+    try {
+      const ui = storage.get(UI_KEY);
+      if (ui) {
+        const { lastJobId, lastTab } = JSON.parse(ui.value);
+        if (lastJobId) {
+          const job = loadJob(lastJobId);
+          if (job) { setActiveJob(job); setScreen("entry"); setTab(lastTab || 0); }
+        }
+      }
+    } catch(e){}
+    setLoaded(true);
+  }, []);
+
+  // Save UI state whenever screen/tab/job changes
+  useEffect(() => {
+    if (!loaded) return;
+    storage.set(UI_KEY, JSON.stringify({ lastJobId: activeJob ? activeJob.id : null, lastTab: tab }));
+  }, [activeJob, tab, loaded]);
+
+  // Save job whenever it changes
+  useEffect(() => {
+    if (!loaded || !activeJob) return;
+    saveJob(activeJob);
+    // keep index in sync
+    setJobIndex(idx => {
+      const exists = idx.find(j => j.id === activeJob.id);
+      if (exists) {
+        const updated = idx.map(j => j.id===activeJob.id ? {...j, jobNum: activeJob.jobNum} : j);
+        saveJobIndex(updated);
+        return updated;
+      }
+      return idx;
+    });
+  }, [activeJob, loaded]);
+
+  // ── Job actions ──
+  const openJob = (id) => {
+    const job = loadJob(id);
+    if (job) { setActiveJob(job); setScreen("entry"); setTab(0); }
+  };
+
+  const createJob = () => {
+    const job = newJob();
+    saveJob(job);
+    const entry = { id: job.id, jobNum: "", created: job.created };
+    const newIdx = [entry, ...jobIndex];
+    setJobIndex(newIdx);
+    saveJobIndex(newIdx);
+    setActiveJob(job);
+    setScreen("entry");
+    setTab(0);
+  };
+
+  const confirmDeleteJob = (id) => setConfirmDel({ type:"job", id });
+  const doDeleteJob = (id) => {
+    deleteJobData(id);
+    const newIdx = jobIndex.filter(j => j.id !== id);
+    setJobIndex(newIdx);
+    saveJobIndex(newIdx);
+    if (activeJob && activeJob.id === id) { setActiveJob(null); setScreen("jobs"); }
+    setConfirmDel(null);
+  };
+
+  const goToJobs = () => { setScreen("jobs"); };
+
+  // ── Gen actions ──
+  const safeGenIdx = activeJob ? Math.min(activeJob.activeGenIdx, activeJob.gens.length-1) : 0;
+  const activeGen  = activeJob ? activeJob.gens[safeGenIdx] : null;
+
+  const updateJob = (patch) => setActiveJob(j => ({...j, ...patch}));
+  const updateGens = (fn) => setActiveJob(j => ({...j, gens: fn(j.gens)}));
+  const updateActiveGen = (patch) => updateGens(gs => gs.map((g,i) => i===safeGenIdx ? {...g,...patch} : g));
+  const updateXfmr = (patch) => updateActiveGen({ xfmr:{ ...activeGen.xfmr, ...patch } });
+  const updateGen  = (patch) => updateActiveGen({ gen:{ ...activeGen.gen, ...patch } });
+  const setMode    = (mode)  => updateActiveGen({ mode });
+
+  const addGen = () => {
+    const ng = newGenEntry();
+    updateGens(gs => [...gs, ng]);
+    updateJob({ activeGenIdx: activeJob.gens.length });
+    setPickerOpen(false);
+  };
+
+  const confirmDeleteGen = (idx) => setConfirmDel({ type:"gen", idx });
+  const doDeleteGen = (idx) => {
+    updateGens(gs => gs.filter((_,i) => i!==idx));
+    updateJob({ activeGenIdx: Math.max(0, Math.min(safeGenIdx, activeJob.gens.length-2)) });
+    setConfirmDel(null);
+  };
+
+  const clearGen = () => updateActiveGen({
+    gen:{ ...EMPTY_GEN, onlineDate:todayISO(), offlineDate:todayISO() },
+    mode:"startup"
+  });
+
+  const report = activeJob && activeGen
+    ? buildReport(activeJob.jobNum, activeGen.xfmr, activeGen.gen, activeGen.mode)
+    : "";
+
+  if (!loaded) return (
+    <div className="min-h-screen flex items-center justify-center text-gray-400" style={{background:"#030712"}}>Loading...</div>
+  );
+
+  // ══ JOBS SCREEN ══════════════════════════════════════════
+  if (screen==="jobs") return (
+    <div className="min-h-screen text-gray-100 pb-24" style={{background:"#030712"}}>
+      <div style={{maxWidth:"32rem", margin:"0 auto", padding:"1rem"}}>
+
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-xl font-bold text-white">Gen Report</h1>
+          <button onClick={createJob}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium">
+            + New Job
+          </button>
+        </div>
+
+        {jobIndex.length === 0 && (
+          <div className="text-center py-20">
+            <div className="text-gray-600 text-sm mb-4">No jobs yet</div>
+            <button onClick={createJob}
+              className="px-6 py-3 rounded-lg bg-blue-600 text-white font-medium">
+              + New Job
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {jobIndex.map(j => (
+            <div key={j.id}
+              className="flex items-center bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+              <button className="flex-1 text-left px-4 py-4" onClick={() => openJob(j.id)}>
+                <div className="font-mono font-bold text-lg text-white">
+                  {j.jobNum || <span className="text-gray-600">No job number</span>}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {new Date(j.created).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" })}
+                </div>
+              </button>
+              <button onClick={() => confirmDeleteJob(j.id)}
+                className="px-4 py-4 text-red-400 text-sm border-l border-gray-800">
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {confirmDel && confirmDel.type==="job" && (
+        <Confirm
+          message={`Delete job ${jobIndex.find(j=>j.id===confirmDel.id)?.jobNum || "this job"}? All generators will be lost.`}
+          onConfirm={() => doDeleteJob(confirmDel.id)}
+          onCancel={() => setConfirmDel(null)}
+        />
+      )}
+    </div>
+  );
+
+  // ══ ENTRY SCREEN ═════════════════════════════════════════
+  const TABS = ["Entry", "Report"];
+
+  return (
+    <div className="min-h-screen text-gray-100 pb-24" style={{background:"#030712"}}>
+      <div style={{maxWidth:"32rem", margin:"0 auto", padding:"1rem"}}>
+
+        {/* ── Header ── */}
+        <div className="flex items-center gap-3 mb-4">
+          <button onClick={goToJobs} className="text-gray-400 text-sm px-2 py-1 bg-gray-800 rounded-lg">
+            ← Jobs
+          </button>
+          <div className="flex-1">
+            <div className="text-xs font-semibold tracking-widest uppercase text-gray-500 mb-1">Job Number</div>
+            <input
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-xl font-mono font-bold text-white focus:outline-none focus:border-blue-500 placeholder-gray-700"
+              value={activeJob.jobNum}
+              onChange={e => updateJob({ jobNum: e.target.value })}
+              placeholder="261158"
+              inputMode="numeric"
+              maxLength={10}
+            />
+          </div>
+        </div>
+
+        {/* ── Tabs ── */}
+        <div className="flex gap-1 mb-5">
+          {TABS.map((t,i) => (
+            <button key={i} onClick={() => setTab(i)}
+              className={`flex-1 py-2 text-xs font-medium rounded-lg ${tab===i ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`}>
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {/* ══ TAB 0: Entry ══ */}
+        {tab===0 && activeGen && (
+          <div className="space-y-4">
+
+            {/* Location block */}
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-blue-400">Location</span>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setPickerOpen(true)}
+                    className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5">
+                    <span className="font-mono font-bold text-sm text-white">{genLabel(activeGen, activeJob.gens)}</span>
+                    <span className="text-gray-400 text-2xl leading-none">▾</span>
+                  </button>
+                  <button onClick={addGen}
+                    className="text-xs text-blue-400 font-medium px-2 py-1.5 bg-gray-800 border border-gray-700 rounded-lg">
+                    + New
+                  </button>
+                </div>
+              </div>
+              <div className="border-t border-gray-800 pt-3 grid grid-cols-3 gap-3">
+                <Field label="Gen #">
+                  <div className="flex gap-2 items-center">
+                    <input className={ic + (activeGen.xfmr.xfmrNum ? " opacity-70" : "")}
+                      value={activeGen.xfmr.xfmrNum}
+                      onChange={e => updateXfmr({ xfmrNum:e.target.value })}
+                      readOnly={!!activeGen.xfmr.xfmrNum}
+                      placeholder="" inputMode="numeric" />
+                    {activeGen.xfmr.xfmrNum ? (
+                      <button
+                        onClick={() => setConfirmDel({ type:"editGenNum" })}
+                        className="text-gray-400 text-xs px-3 py-3 bg-gray-800 border border-gray-700 rounded-lg flex-shrink-0 font-medium">
+                        Edit
+                      </button>
+                    ) : null}
+                  </div>
+                </Field>
+                <Field label="Latitude">
+                  <input className={ic} value={activeGen.xfmr.lat || ""}
+                    onChange={e => {
+                      const val = e.target.value;
+                      // Auto-split if full coordinate pasted (contains comma)
+                      if (val.includes(",")) {
+                        const parts = val.split(",").map(s => s.trim());
+                        const lat = parts[0] || "";
+                        const lon = parts[1] || "";
+                        updateXfmr({ lat, lon, gps: lat && lon ? `${lat}, ${lon}` : "" });
+                      } else {
+                        updateXfmr({ lat: val, gps: val && activeGen.xfmr.lon ? `${val}, ${activeGen.xfmr.lon}` : "" });
+                      }
+                    }}
+                    inputMode="decimal" />
+                </Field>
+                <Field label="Longitude">
+                  <input className={ic} value={activeGen.xfmr.lon || ""}
+                    onChange={e => updateXfmr({ lon:e.target.value, gps: activeGen.xfmr.lat && e.target.value ? `${activeGen.xfmr.lat}, ${e.target.value}` : "" })}
+                    inputMode="decimal" />
+                </Field>
+              </div>
+            </div>
+
+            {/* Report type */}
+            <div className="flex gap-2">
+              <button onClick={() => setMode("startup")}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 ${activeGen.mode==="startup" ? "bg-green-900 text-green-200 border-green-500" : "bg-green-950 text-green-600 border-green-800"}`}>
+                Online
+              </button>
+              <button onClick={() => setMode("final")}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border-2 ${activeGen.mode==="final" ? "bg-red-900 text-red-200 border-red-500" : "bg-red-950 text-red-600 border-red-800"}`}>
+                Offline-Final
+              </button>
+            </div>
+
+            {/* Generator info */}
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+              <Field label="Manufacturer / Rental Company">
+                <input className={ic} value={activeGen.gen.manufacturer}
+                  onChange={e => updateGen({ manufacturer:e.target.value })} placeholder="" />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Generator Number">
+                  <input className={ic} value={activeGen.gen.genNum}
+                    onChange={e => updateGen({ genNum:e.target.value })} placeholder="" />
+                </Field>
+                <Field label="kW Rating">
+                  <input className={ic} value={activeGen.gen.kw}
+                    onChange={e => updateGen({ kw:e.target.value })} placeholder="" inputMode="numeric" />
+                </Field>
+              </div>
+              <Field label="PERP # (CARB blue plate)">
+                <input className={ic} value={activeGen.gen.perp}
+                  onChange={e => updateGen({ perp:e.target.value })} placeholder="" />
+              </Field>
+            </div>
+
+            {/* Start data */}
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+              <div className="text-xs font-medium text-green-400">Start Data</div>
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="Start Hours">
+                  <input className={ic} value={activeGen.gen.startHours}
+                    onChange={e => updateGen({ startHours:e.target.value })} placeholder="" inputMode="decimal" />
+                </Field>
+                <Field label="Fuel %">
+                  <input className={ic} value={activeGen.gen.startFuel}
+                    onChange={e => updateGen({ startFuel:e.target.value })} placeholder="" inputMode="numeric" />
+                </Field>
+                <Field label="DEF %">
+                  <input className={ic} value={activeGen.gen.startDEF}
+                    onChange={e => updateGen({ startDEF:e.target.value })} placeholder="" inputMode="numeric" />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Online Time (24hr)">
+                  <TimePicker value={activeGen.gen.onlineTime} onChange={v => updateGen({ onlineTime:v })} label="Online Time" />
+                </Field>
+                <Field label="Online Date">
+                  <input type="date" className={ic} value={activeGen.gen.onlineDate}
+                    onChange={e => updateGen({ onlineDate:e.target.value })} />
+                </Field>
+              </div>
+            </div>
+
+            {/* End data */}
+            {activeGen.mode==="final" && (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+                <div className="text-xs font-medium text-red-400">End Data</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Field label="End Hours">
+                    <input className={ic} value={activeGen.gen.endHours}
+                      onChange={e => updateGen({ endHours:e.target.value })} placeholder="" inputMode="decimal" />
+                  </Field>
+                  <Field label="Fuel %">
+                    <input className={ic} value={activeGen.gen.endFuel}
+                      onChange={e => updateGen({ endFuel:e.target.value })} placeholder="" inputMode="numeric" />
+                  </Field>
+                  <Field label="DEF %">
+                    <input className={ic} value={activeGen.gen.endDEF}
+                      onChange={e => updateGen({ endDEF:e.target.value })} placeholder="" inputMode="numeric" />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Offline Time (24hr)">
+                    <TimePicker value={activeGen.gen.offlineTime} onChange={v => updateGen({ offlineTime:v })} label="Offline Time" />
+                  </Field>
+                  <Field label="Offline Date">
+                    <input type="date" className={ic} value={activeGen.gen.offlineDate}
+                      onChange={e => updateGen({ offlineDate:e.target.value })} />
+                  </Field>
+                </div>
+              </div>
+            )}
+
+            {/* All gens list */}
+            {activeJob.gens.length > 1 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 space-y-1">
+                <div className="text-xs font-medium text-gray-500 mb-2">
+                  All Generators — Job <span className="font-mono text-gray-400">{activeJob.jobNum || "—"}</span>
+                </div>
+                {activeJob.gens.map((g,i) => (
+                  <div key={g.id}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg ${i===safeGenIdx ? "bg-blue-600 bg-opacity-20 border border-blue-500 border-opacity-30" : "bg-gray-800"}`}>
+                    <button className="flex-1 text-left" onClick={() => updateJob({ activeGenIdx:i })}>
+                      <span className={`font-mono font-bold text-sm ${i===safeGenIdx ? "text-blue-300" : "text-gray-200"}`}>{genLabel(g, activeJob.gens)}</span>
+                      <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${g.mode==="final" ? "bg-red-900 text-red-300" : "bg-green-900 text-green-300"}`}>
+                        {g.mode==="final" ? "Final" : "Startup"}
+                      </span>
+                    </button>
+                    <button onClick={() => confirmDeleteGen(i)} className="text-red-400 text-xs px-2 py-1 ml-1">✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button onClick={() => setTab(1)} className="w-full py-3 rounded-lg bg-blue-600 text-white text-base font-medium">
+              View Report →
+            </button>
+            <button onClick={clearGen} className="w-full py-2 rounded-lg bg-gray-900 border border-gray-700 text-gray-500 text-sm">
+              Clear This Generator's Data
+            </button>
+          </div>
+        )}
+
+        {/* ══ TAB 1: Report ══ */}
+        {tab===1 && activeGen && (
+          <div className="space-y-4">
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-medium text-gray-400">
+                  {activeGen.mode==="final" ? "Final" : "Startup"} — {genLabel(activeGen, activeJob.gens)}
+                </span>
+                <span className="text-xs font-mono text-gray-600">{activeJob.jobNum || "—"}</span>
+              </div>
+              <pre className="text-sm text-gray-200 whitespace-pre-wrap font-mono leading-relaxed select-all">
+                {report || "No data yet.\n\nFill in the Entry tab first."}
+              </pre>
+            </div>
+
+            {report && <CopyButton text={report} />}
+
+            {activeJob.gens.length > 1 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-3">
+                <div className="text-xs font-medium text-gray-400 mb-2">Switch Generator</div>
+                <div className="flex flex-wrap gap-2">
+                  {activeJob.gens.map((g,i) => (
+                    <button key={g.id} onClick={() => updateJob({ activeGenIdx:i })}
+                      className={`px-3 py-2 rounded-lg text-sm font-mono font-medium ${i===safeGenIdx ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-300"}`}>
+                      {genLabel(g, activeJob.gens)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button onClick={() => setTab(0)} className="w-full py-3 rounded-lg bg-gray-800 text-gray-300 text-base font-medium">
+              ← Edit Entry
+            </button>
+          </div>
+        )}
+
+      </div>
+
+      {/* ── Gen Picker Sheet ── */}
+      {pickerOpen && activeJob && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-end justify-center" style={{zIndex:50}}
+          onClick={(e) => { if (e.target===e.currentTarget) setPickerOpen(false); }}>
+          <div className="bg-gray-900 w-full rounded-t-2xl p-4 pb-8" style={{maxWidth:"32rem", maxHeight:"80vh"}}>
+            <div className="text-center text-sm text-gray-400 mb-1">Select Generator</div>
+            <div className="text-center text-xs text-gray-600 mb-3 font-mono">Job {activeJob.jobNum || "—"}</div>
+            <div className="overflow-y-auto space-y-1 no-scrollbar" style={{maxHeight:"52vh"}}>
+              {activeJob.gens.map((g,i) => (
+                <button key={g.id} onClick={() => { updateJob({ activeGenIdx:i }); setPickerOpen(false); }}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg ${i===safeGenIdx ? "bg-blue-600 bg-opacity-30 text-blue-300 border border-blue-500 border-opacity-50" : "bg-gray-800 text-gray-300"}`}>
+                  <span className="font-mono font-bold text-base">{genLabel(g, activeJob.gens)}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded ml-2 flex-shrink-0 ${g.mode==="final" ? "bg-red-900 text-red-300" : "bg-green-900 text-green-300"}`}>
+                    {g.mode==="final" ? "Final" : "Startup"}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-3">
+              <button onClick={() => { addGen(); setPickerOpen(false); }}
+                className="flex-1 py-3 rounded-lg bg-blue-600 bg-opacity-20 border border-blue-500 border-opacity-30 text-blue-300 font-medium">
+                + Add Generator
+              </button>
+              <button onClick={() => setPickerOpen(false)}
+                className="flex-1 py-3 rounded-lg bg-gray-800 text-gray-300 font-medium">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm dialogs ── */}
+      {confirmDel && confirmDel.type==="editGenNum" && (
+        <Confirm
+          message="Clear the Gen # so you can edit it?"
+          onConfirm={() => { updateXfmr({ xfmrNum:"" }); setConfirmDel(null); }}
+          onCancel={() => setConfirmDel(null)}
+          confirmLabel="Clear"
+        />
+      )}
+      {confirmDel && confirmDel.type==="gen" && (
+        <Confirm
+          message={`Delete ${genLabel(activeJob.gens[confirmDel.idx], activeJob.gens)}? This cannot be undone.`}
+          onConfirm={() => doDeleteGen(confirmDel.idx)}
+          onCancel={() => setConfirmDel(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
