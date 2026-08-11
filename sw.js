@@ -1,4 +1,4 @@
-const CACHE = "gen-report-v9";
+const CACHE = "gen-report-v10";
 const ASSETS = [
   "/",
   "/index.html",
